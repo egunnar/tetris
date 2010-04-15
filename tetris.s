@@ -27,8 +27,8 @@ score_file:
 .ascii "tetris.dat\0"
 print_f_code:
 .ascii "-%.*s-\n\0"
-temp_str:
-.ascii "1%d2\0"
+score_line:
+.ascii "%s - %d\n\0"
 #      "\n%d\n*"
 ftwo:
 .byte 42
@@ -95,26 +95,37 @@ pushl %eax
 #TODO check for error
 
 # if read nothing then end
-# FIXME never is true
-#cmpl $0, BYTES_READ_IN(%ebp) why don't this work ???
 cmpl $0, %eax
 je end_read_loop
 
-# FIXME erase
-# why the fuck can't i get this to not throw
-# seg fault
-pushl BYTES_READ_IN(%ebp)
-pushl $52
-pushl $temp_str
+# for now assume the buffer is big enough 
+
+# get the str len
+pushl $record_buffer
+call string_len
+addl $4, %esp
+# ebx will hold str len
+mov %eax, %ebx
+
+# have %ebx point to start of integer
+addl $1, %ebx
+addl $record_buffer, %ebx
+
+# FIXME 
+pushl (%ebx)
+#pushl BYTES_READ_IN(%ebp)
+push $record_buffer
+# "%s - %d\n\0"
+pushl $score_line
 call printw
 addl $12, %esp
 
-pushl $record_buffer
-pushl BYTES_READ_IN(%ebp)
-pushl $print_f_code
-call printw 
-addl $12, %esp
-call refresh
+#pushl $record_buffer
+#pushl BYTES_READ_IN(%ebp)
+#pushl $print_f_code
+#call printw 
+#addl $12, %esp
+#call refresh
 
 jmp read_loop
 end_read_loop:
@@ -136,6 +147,31 @@ ret
 ###################################
 # function to get user name
 ###################################
+
+###################################
+# function to string_len 
+###################################
+.type string_len, @function
+string_len:
+.equ START_OF_STRING, 8 
+pushl %ebp           #save old base pointer
+movl  %esp, %ebp     #make stack pointer the base pointer
+
+movl $0, %edi # %edi is the current index 
+movl START_OF_STRING(%ebp), %ebx
+string_len_loop:
+cmpb $0, (%ebx) 
+je string_len_end_loop
+incb %ebx
+incl %edi
+jmp string_len_loop
+
+string_len_end_loop:
+movl %edi, %eax
+
+movl %ebp, %esp      #restore the stack pointer
+popl %ebp            #restore the base pointer
+ret
 
 ###################################
 # functinon to init ncurses 
