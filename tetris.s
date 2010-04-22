@@ -26,7 +26,10 @@ welcome_string2:
 score_file:
 .ascii "tetris.dat\0"
 print_f_code:
-.ascii "-%.*s-\n\0"
+.ascii "-%c-\n\0"
+#.ascii "-%.*s-\n\0"
+print_f_code2:
+.ascii "-%d-\n\0"
 score_line:
 .ascii "%s - %d\n\0"
 #      "\n%d\n*"
@@ -59,10 +62,18 @@ int $LINUX_SYSCALL
 splash_screen:
 .equ FILE_DESCRIPTOR, -4 
 .equ BYTES_READ_IN, -8 
-.equ PRINTED_CHARACTERS, -12 
+.equ ON_STRING_MODE, -12 
+.equ DIGIT_NUMBER, -16
+.equ SCORE, -20
+.equ CURRENT_BYTE_INDEX, -24
+.equ CURRENT_BYTE, -28
 
 pushl %ebp           #save old base pointer
 movl  %esp, %ebp     #make stack pointer the base pointer
+
+# make room for local variables
+#addl $28, %esp
+subl $28, %esp
 
 call init_ncurses
 # 1) print welcome
@@ -79,55 +90,107 @@ movl  $score_file, %ebx
 movl  $0, %ecx    #This says to open read-only
 movl  $0666, %edx
 int   $LINUX_SYSCALL
-pushl %eax # should be my file descriptor
+#check
+#pushl %eax # should be my file descriptor
+movl %eax, FILE_DESCRIPTOR(%ebp)
 # TODO	 if %eax if negative that means instead a error
 # occurred and that is the error code
 
-
 read_loop:
-# actually read into buffer
-movl FILE_DESCRIPTOR(%ebp), %ebx
-movl  $record_buffer, %ecx
-movl  $BUFFER_SIZE, %edx
-movl  $SYS_READ, %eax
-int   $LINUX_SYSCALL
-pushl %eax
-#TODO check for error
+	# actually read into buffer
+	movl FILE_DESCRIPTOR(%ebp), %ebx
+	movl  $record_buffer, %ecx
+	movl  $BUFFER_SIZE, %edx
+	movl  $SYS_READ, %eax
+	int   $LINUX_SYSCALL
+	#check
+	#pushl %eax
+	movl %eax, BYTES_READ_IN(%ebp)
+	#TODO check for error
 
-# if read nothing then end
-cmpl $0, %eax
-je end_read_loop
+	# if read nothing then end
+	cmpl $0, %eax
+	je end_read_loop
+	
+	movl $1, ON_STRING_MODE(%ebp)
+	movl $0, DIGIT_NUMBER(%ebp)
+	movl $0, CURRENT_BYTE_INDEX(%ebp)
+	# loop on each byte
+	each_byte_loop:
+	movl BYTES_READ_IN(%ebp), %eax
+	cmpl %eax, CURRENT_BYTE_INDEX(%ebp)
+	je each_byte_loop_end
+	movl CURRENT_BYTE_INDEX(%ebp), %ebx
+	movl $0, %eax
+	movb record_buffer(,%ebx, 1), %al
+	movl %eax, CURRENT_BYTE(%ebp)
 
-# for now assume the buffer is big enough 
+# FIXME don't print a \0 alone
+		# if on string mode == true
+		cmpl $0, ON_STRING_MODE(%ebp)
+		je not_on_string_mode
+			cmpl $0, CURRENT_BYTE(%ebp)
+			je skip_print
+			pushl CURRENT_BYTE(%ebp)
+			pushl $print_f_code
+			call printw
+			addl $8, %esp
+			call refresh
+			jmp pre_each_byte_loop_end
+			skip_print:
+			movl $0, ON_STRING_MODE(%ebp)	
+			movl $0, SCORE(%ebp)
+			jmp pre_each_byte_loop_end
 
-# get the str len
-pushl $record_buffer
-call string_len
-addl $4, %esp
-# ebx will hold str len
-mov %eax, %ebx
+	    # if on string mode == false
+		not_on_string_mode:
+			# not right???
+			#addl $1, CURRENT_BYTE_INDEX(%ebp)
+			cmpl $3, DIGIT_NUMBER(%ebp)
+			jne not_third_digit
 
-# have %ebx point to start of integer
-addl $1, %ebx
-addl $record_buffer, %ebx
+			# on third digit
+			# %al least signigant byte of %eax
+			movl $0, %eax
+			movb CURRENT_BYTE(%ebp), %al
+			sall $24, %eax
+		    orl %eax, SCORE(%ebp)	
 
-# FIXME 
-pushl (%ebx)
-#pushl BYTES_READ_IN(%ebp)
-push $record_buffer
-# "%s - %d\n\0"
-pushl $score_line
-call printw
-addl $12, %esp
+			pushl SCORE(%ebp)
+			pushl $print_f_code2
+			call printw
+			# not on 3rd digit
+			addl $8, %esp
+			call refresh
+			movl $0, DIGIT_NUMBER(%ebp)
+			jmp pre_each_byte_loop_end
 
-#pushl $record_buffer
-#pushl BYTES_READ_IN(%ebp)
-#pushl $print_f_code
-#call printw 
-#addl $12, %esp
-#call refresh
+			not_third_digit:
+			#movl DIGIT_NUMBER(%ebp), %eax
+			#cmpl 
+			# %al least signigant byte of %eax
+			movl $0, %eax
+			movb CURRENT_BYTE(%ebp), %al
 
-jmp read_loop
+			cmpl $1, DIGIT_NUMBER(%ebp)
+			jne test_two
+			sall $8, %eax
+			jmp end_of_shift
+
+			test_two:
+			cmpl $2, DIGIT_NUMBER(%ebp)
+			jne end_of_shift
+			sall $16, %eax
+
+			end_of_shift:
+		    orl %eax, SCORE(%ebp)	
+
+			addl $1, DIGIT_NUMBER(%ebp)
+
+	pre_each_byte_loop_end:
+		addl $1, CURRENT_BYTE_INDEX(%ebp)
+		jmp each_byte_loop
+	each_byte_loop_end:
 end_read_loop:
 addl $4, %esp
 ########################################
@@ -162,7 +225,8 @@ movl START_OF_STRING(%ebp), %ebx
 string_len_loop:
 cmpb $0, (%ebx) 
 je string_len_end_loop
-incb %ebx
+#incb %ebx
+addl $1, %ebx
 incl %edi
 jmp string_len_loop
 
