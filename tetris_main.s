@@ -626,7 +626,7 @@ divl %edi
 # remainder in %edx
 movl %edx, current_block_type
 # FIXME FIXME erase
-movl $0, current_block_type
+# movl $0, current_block_type
 
 movl %ebp, %esp      #restore the stack pointer
 popl %ebp            #restore the base pointer
@@ -840,6 +840,10 @@ main_loop:
 		je go_rotate
 		cmpl $107, KEY_STROKE(%ebp)
 		je go_rotate
+		cmpl $0403, KEY_STROKE(%ebp)
+		je go_up
+		cmpl $105, KEY_STROKE(%ebp)
+		je go_up
 
 		# FIXME shouldn't be needed
 		jmp end_keystroke
@@ -866,6 +870,12 @@ main_loop:
 		cmpl $4, current_rotation
 		jne end_keystroke
 		movl $0, current_rotation
+		jmp end_keystroke 
+
+		go_up:
+		movl level_counter, %eax
+		movl %eax, I(%ebp)
+		jmp end_keystroke 
 
 		end_keystroke:
 
