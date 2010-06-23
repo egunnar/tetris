@@ -478,6 +478,44 @@ popl %ebp            #restore the base pointer
 ret
 
 ###################################
+# function is_square_in_game_block # takes 2 parameters. the x and y cordinates
+# to check. returns 0 if not in the game play area.
+# otherwise 1
+###################################
+.type is_square_in_game_block, @function
+is_square_in_game_block:
+pushl %ebp           #save old base pointer
+movl  %esp, %ebp     #make stack pointer the base pointer
+
+.equ X_PARAM, 8 
+.equ Y_PARAM, 12 
+
+movl $0, %eax
+
+# check left wall
+cmpl $1, X_PARAM(%ebp) 
+jl illegal_square
+
+# check right wall
+cmpl $17, X_PARAM(%ebp) 
+jge illegal_square
+
+# check top wall
+cmpl $1, Y_PARAM(%ebp) 
+jl illegal_square
+
+# check bottom wall
+cmpl $17, Y_PARAM(%ebp) 
+jge illegal_square
+
+movl $1, %eax
+illegal_square:
+
+movl %ebp, %esp      #restore the stack pointer
+popl %ebp            #restore the base pointer
+ret
+
+###################################
 # function draw_block
 # takes 1 param which is the color pair 
 ###################################
@@ -494,29 +532,66 @@ addl $4, %esp
 
 call give_block_coord 
 
+# check if current_x & current_y is in playable area
+pushl current_y 
+pushl current_x 
+call is_square_in_game_block
+addl $8, %esp
+cmpl $0, %eax
+je skip_print0
+
 pushl $x
 pushl current_x 
 pushl current_y 
 call mvprintw
 addl $12, %esp
+skip_print0:
+
+# check if current_x1 & current_y1 is in playable area
+pushl current_y1 
+pushl current_x1
+call is_square_in_game_block
+addl $8, %esp
+cmpl $0, %eax
+je skip_print1
 
 pushl $x
 pushl current_x1 
 pushl current_y1 
 call mvprintw
 addl $12, %esp
+skip_print1:
+
+# check if current_x2 & current_y2 is in playable area
+pushl current_y2 
+pushl current_x2
+call is_square_in_game_block
+addl $8, %esp
+cmpl $0, %eax
+je skip_print2
 
 pushl $x
 pushl current_x2
 pushl current_y2 
 call mvprintw
 addl $12, %esp
+skip_print2:
+
+# check if current_x3 & current_y3 is in playable area
+pushl current_y3 
+pushl current_x3
+call is_square_in_game_block
+addl $8, %esp
+cmpl $0, %eax
+je skip_print3
 
 pushl $x
 pushl current_x3 
 pushl current_y3 
 call mvprintw
 addl $12, %esp
+skip_print3:
+
 call refresh
 
 # FIXME this is correct, right ?
@@ -597,9 +672,6 @@ rotate_move_ok:
 pushl %ebp           #save old base pointer
 movl  %esp, %ebp     #make stack pointer the base pointer
 
-#.equ ROTATION_TEMP, -4
-#subl $4, %esp
-
 addl $1, current_rotation 
 cmpl $4, current_rotation
 jne dont_reset_rotation
@@ -609,22 +681,22 @@ dont_reset_rotation:
 call give_block_coord 
 movl $0, %eax
 
-cmpl $16, current_x
+cmpl $17, current_x
 jge move_not_ok
-cmpl $16, current_x1
+cmpl $17, current_x1
 jge move_not_ok
-cmpl $16, current_x2
+cmpl $17, current_x2
 jge move_not_ok
-cmpl $16, current_x3
+cmpl $17, current_x3
 jge move_not_ok
 
-cmpl $1, current_x
+cmpl $0, current_x
 jle move_not_ok
-cmpl $1, current_x1
+cmpl $0, current_x1
 jle move_not_ok
-cmpl $1, current_x2
+cmpl $0, current_x2
 jle move_not_ok
-cmpl $1, current_x3
+cmpl $0, current_x3
 jle move_not_ok
 
 movl $1, %eax
@@ -635,7 +707,6 @@ cmpl $-1, current_rotation
 jne dont_reset_rotation2
 movl $3, current_rotation
 dont_reset_rotation2:
-
 
 movl %ebp, %esp      #restore the stack pointer
 popl %ebp            #restore the base pointer
@@ -802,7 +873,6 @@ main_loop:
 		movl I(%ebp), %eax
 		cmpl %eax, level_counter
 		jge time_loop
-
 
 
 	addl $1, current_y
