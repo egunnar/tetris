@@ -1,3 +1,6 @@
+# note for better keyboard control look into the select function
+# think it sleeps and is interupted by keyboard
+
 #define COLOR_BLACK	0
 #define COLOR_RED	1
 #define COLOR_GREEN	2
@@ -100,8 +103,16 @@ TEXT_COLOR_PAIR:
 .long 2
 FRAME_COLOR_PAIR:
 .long 3
+# filled_squares_counter is count of filled blocks on screen. used with
+# filled_squares_y and filled_squares_y
+filled_squares_counter:
+.long 0
 
 .section .bss
+# game sqaures that have been filled by previous blocks. 256 is 16 * 16 which
+# is the playable area. 256 * 4 (each one will be 4 bytes) = 1024 FIXME (maybe) 
+.lcomm filled_squares_x, 1024
+.lcomm filled_squares_y, 1024
 
 .section .text
 
@@ -291,11 +302,6 @@ cmpl $3, current_rotation
 je rotation_type_3
 jmp end_loop_rotation
 
-
-##########################################
-# START HERE !!!!!!!!!!!!!!
-# rotation calcuation completely 
-# started to rework on square 2 below
 rotation_type_1:
 #rotation type 1 (-y, x)
 #  square 2
@@ -447,6 +453,18 @@ ret
 main_game:
 pushl %ebp           #save old base pointer
 movl  %esp, %ebp     #make stack pointer the base pointer
+
+# FIXME ERASE uses filled_squares_counter instead
+# initalize filled_squares_x and filled_squares_y
+#movl $256, %ecx
+#movl $filled_squares_x, %eax 
+#movl $filled_squares_y, %ebx 
+#	initalize_filled_squares_loop:
+#	movl $0, (%eax) 
+#	movl $0, (%ebx) 
+#	addl $1, %eax
+#	addl $1, %ebx
+#	loop initalize_filled_squares_loop
 
 # set the seed for generating random numbers later
 # c code
@@ -605,6 +623,76 @@ popl %ebp            #restore the base pointer
 ret
 
 ###################################
+# function leave_old_block
+# draw the old block permemantly and save its squares in
+# filled_squares_x and filled_squares_y 
+###################################
+.type leave_old_block, @function
+leave_old_block:
+pushl %ebp           #save old base pointer
+movl  %esp, %ebp     #make stack pointer the base pointer
+
+pushl BLOCK_COLOR_PAIR
+call draw_block
+addl $4, %esp
+
+call give_block_coord 
+
+movl $filled_squares_x, %eax
+movl $filled_squares_y, %ebx
+
+# old way
+#addl filled_squares_counter, %eax
+#addl filled_squares_counter, %ebx
+
+# FIXME isn't there a addressing way to do this better? 
+movl $0, %edi
+filled_square_loop:
+	cmpl %edi, filled_squares_counter
+	je end_filled_square_loop
+	addl $4, %eax
+	addl $4, %ebx
+
+	addl $1, %edi
+	jmp filled_square_loop
+end_filled_square_loop:
+
+movl current_x, %ecx
+movl current_y, %edx
+movl %ecx, (%eax)
+movl %edx, (%ebx)
+addl $4, %eax
+addl $4, %ebx
+
+movl current_x1, %ecx
+movl current_y1, %edx
+movl %ecx, (%eax)
+movl %edx, (%ebx)
+addl $4, %eax
+addl $4, %ebx
+
+movl current_x2, %ecx
+movl current_y2, %edx
+movl %ecx, (%eax)
+movl %edx, (%ebx)
+addl $4, %eax
+addl $4, %ebx
+
+movl current_x3, %ecx
+movl current_y3, %edx
+movl %ecx, (%eax)
+movl %edx, (%ebx)
+addl $4, %eax
+addl $4, %ebx
+
+addl $4, filled_squares_counter
+
+movl %ebp, %esp      #restore the stack pointer
+popl %ebp            #restore the base pointer
+ret
+
+
+###################################
 # function new_block
 # whenever a new block is started at the top of the screen
 ###################################
@@ -613,8 +701,16 @@ new_block:
 pushl %ebp           #save old base pointer
 movl  %esp, %ebp     #make stack pointer the base pointer
 
+# don't call at the start of a game(current_y will be 0)
+cmpl $0, current_y
+je skip_leave_old_block
+call leave_old_block
+skip_leave_old_block:
+
+movl $0, current_rotation
 movl $8, current_x
 movl $1, current_y
+
 # generate a random number between 0 and 3 for the block type
 # current_block_type
 # c code
@@ -626,7 +722,7 @@ divl %edi
 # remainder in %edx
 movl %edx, current_block_type
 # FIXME FIXME erase
-# movl $0, current_block_type
+movl $0, current_block_type
 
 movl %ebp, %esp      #restore the stack pointer
 popl %ebp            #restore the base pointer
@@ -646,6 +742,7 @@ call give_block_coord
 
 movl $0, %eax
 
+# check against the left wall
 cmpl $1, current_x
 jle left_move_not_ok
 cmpl $1, current_x1
@@ -752,26 +849,208 @@ time_for_new_block:
 pushl %ebp           #save old base pointer
 movl  %esp, %ebp     #make stack pointer the base pointer
 
+.equ RETURN_VALUE, -4
+subl $4, %esp
+
 call give_block_coord 
-movl $0, %eax
+movl $0, RETURN_VALUE(%ebp)
 
 # PART 1
 # 1) the very bottom of the playable area
-cmpl $17, current_y
-jge hit_bottom_of_screen
-cmpl $17, current_y1
-jge hit_bottom_of_screen
-cmpl $17, current_y2
-jge hit_bottom_of_screen
-cmpl $17, current_y3
-jge hit_bottom_of_screen
+cmpl $16, current_y
+jge block_is_done
+cmpl $16, current_y1
+jge block_is_done
+cmpl $16, current_y2
+jge block_is_done
+cmpl $16, current_y3
+jge block_is_done
 
-movl $1, %eax
-hit_bottom_of_screen:
+# PART 2
+# 2) check if hit existing blocks
+movl $0, %edi
+movl $filled_squares_x, %eax
+movl $filled_squares_y, %ebx
+
+check_loop:
+	movl (%eax), %ecx
+	movl (%ebx), %edx
+
+	subl $1, %edx
+
+	# check square 1
+	cmpl %ecx, current_x
+	jne check_square_2
+	cmpl %edx, current_y
+	je block_is_done
+
+	# check square 2
+	check_square_2:
+	cmpl %ecx, current_x1
+	jne check_square_3
+	cmpl %edx, current_y1
+	je block_is_done
+
+	# check square 3
+	check_square_3:
+	cmpl %ecx, current_x2
+	jne check_square_4
+	cmpl %edx, current_y2
+	je block_is_done
+
+	# check square 4
+	check_square_4:
+	cmpl %ecx, current_x3
+	jne blocks_ok_for_this_iteration
+	cmpl %edx, current_y3
+	je block_is_done
+
+	blocks_ok_for_this_iteration:
+	cmpl %edi, filled_squares_counter 
+	je end_check_loop
+
+	addl $4, %eax
+	addl $4, %ebx
+	addl $1, %edi
+	
+	jmp check_loop
+end_check_loop:
+
+
+movl $1, RETURN_VALUE(%ebp)
+block_is_done:
+
+movl RETURN_VALUE(%ebp), %eax
 
 movl %ebp, %esp      #restore the stack pointer
 popl %ebp            #restore the base pointer
 ret
+
+###################################
+# function does_movement_hit_existing_blocks
+# takes 1 arg - the key stroke just hit (for left, right, 
+# or rotate)
+# returns 0 if the move is invalid
+###################################
+.type does_movement_hit_existing_blocks, @function
+does_movement_hit_existing_blocks:
+pushl %ebp           #save old base pointer
+movl  %esp, %ebp     #make stack pointer the base pointer
+
+.equ KEY_HIT, 8 
+.equ RETURN_VALUE, -4
+
+subl $4, %esp
+
+cmpl $0402, KEY_HIT(%ebp)
+je prepare_rotate_logic
+cmpl $107, KEY_HIT(%ebp)
+je prepare_rotate_logic
+jmp no_prepare_rotate_logic
+
+prepare_rotate_logic:
+	addl $1, current_rotation 
+	cmpl $4, current_rotation
+	jne dont_reset_rotation3
+	movl $0, current_rotation
+	dont_reset_rotation3:
+no_prepare_rotate_logic:
+
+call give_block_coord 
+
+# START HERE make it work for key strokes other than
+# left
+
+movl $0, RETURN_VALUE(%ebp)
+
+movl $0, %edi
+movl $filled_squares_x, %eax
+movl $filled_squares_y, %ebx
+
+check_loop_existing_block:
+	movl (%eax), %ecx
+	movl (%ebx), %edx
+
+	cmpl $106, KEY_HIT(%ebp)
+	je go_left_check
+	cmpl $260, KEY_HIT(%ebp)
+	je go_left_check
+	cmpl $108, KEY_HIT(%ebp)
+	je go_right_check
+	cmpl $261, KEY_HIT(%ebp)
+	je go_right_check
+	jmp end_key_check
+
+	go_left_check:
+	addl $1, %ecx
+	jmp end_key_check
+	go_right_check:
+	subl $1, %ecx
+	end_key_check:
+
+	# check square 1
+	cmpl %ecx, current_x
+	jne do_check_square_2
+	cmpl %edx, current_y
+	je block_collision
+
+	# check square 2
+	do_check_square_2:
+	cmpl %ecx, current_x1
+	jne do_check_square_3
+	cmpl %edx, current_y1
+	je block_collision
+
+	# check square 3
+	do_check_square_3:
+	cmpl %ecx, current_x2
+	jne do_check_square_4
+	cmpl %edx, current_y2
+	je block_collision
+
+	# check square 4
+	do_check_square_4:
+	cmpl %ecx, current_x3
+	jne do_blocks_ok_for_this_iteration
+	cmpl %edx, current_y3
+	je block_collision
+
+	do_blocks_ok_for_this_iteration:
+	cmpl %edi, filled_squares_counter 
+	je end_check_loop_existing_block
+
+	addl $4, %eax
+	addl $4, %ebx
+	addl $1, %edi
+	
+	jmp check_loop_existing_block
+end_check_loop_existing_block:
+
+
+movl $1, RETURN_VALUE(%ebp)
+block_collision:
+
+cmpl $0402, KEY_HIT(%ebp)
+je prepare_rotate_logic2
+cmpl $107, KEY_HIT(%ebp)
+je prepare_rotate_logic2
+jmp no_prepare_rotate_logic2
+
+prepare_rotate_logic2:
+	subl $1, current_rotation 
+	cmpl $-1, current_rotation
+	jne dont_reset_rotation4
+	movl $3, current_rotation
+	dont_reset_rotation4:
+no_prepare_rotate_logic2:
+
+movl RETURN_VALUE(%ebp), %eax
+
+movl %ebp, %esp      #restore the stack pointer
+popl %ebp            #restore the base pointer
+ret
+###################################
+
 
 ###################################
 # function main_game_loop
@@ -785,7 +1064,24 @@ movl  %esp, %ebp     #make stack pointer the base pointer
 .equ I, -4
 .equ KEY_STROKE, -8
 
-subl $8, %esp
+# then reserve 128 for fd_set struct
+# @ -12
+# then 8 for timeval
+# @ -140
+.equ TIME_VAL, -144
+.equ SELECT_RESULT, -148
+
+#.equ FD_SET, -12  # 128 bytes
+#.equ TIMEVAL, -140 # 8 bytes
+
+.equ TIMEVAL_tv_sec, -144
+.equ TIMEVAL_tv_usec, -140
+.equ FD_SET, -136
+
+// 8 is pre FD_SET
+subl $144, %esp
+
+
 
 call new_block
 main_loop:
@@ -799,8 +1095,8 @@ main_loop:
 	call new_block
 	no_new_block_time:
 
-
-	movl $0, I(%ebp)
+	# FIXME movl $0 instead
+	movl $1, I(%ebp)
 	time_loop:
 
 		# draw block
@@ -811,18 +1107,64 @@ main_loop:
 		# sleep
 		# think -1 means no key stroke
 		#pushl $100000 # .1 seconds
-		pushl $100000 # .1 seconds
-		call usleep 
-		addl $4, %esp
+		#call usleep 
+		#addl $4, %esp
+
+		#FD_ZERO(&rfds);
+		pushl $128
+		pushl $0
+		movl %ebp, %eax
+		subl $12, %eax
+		# tricky memset counts forward, the stack goes backward, so start at end
+		subl $127, %eax
+		pushl %eax
+		call memset
+		addl $12, %esp 
+
+
+		#FD_SET(0, &rfds);
+		# i think this set the 0 bit to 1 ??
+		# FIXME may not work
+		movl %ebp, %eax
+		subl $139, %eax 
+		movb $1, (%eax)
+		#movl $1, FD_SET(%ebp)
+		
+		# tv.tv_sec = 5;
+		# tv.tv_usec = 0;
+		# struct timeval {
+		#	time_t      tv_sec;     // seconds 
+		#	suseconds_t tv_usec;    // microseconds 
+		# };
+		movl $0, TIMEVAL_tv_sec(%ebp)
+		movl $100000, TIMEVAL_tv_usec(%ebp) # .1 seconds
+		#movl  $900000, TIMEVAL_tv_usec(%ebp) # .1 seconds
+
+		#retval = select(1, &rfds, NULL, NULL, &tv);
+		movl %ebp, %eax
+		subl $144, %eax
+		pushl %eax
+		pushl $0
+		pushl $0
+		movl %ebp, %eax
+		subl $136, %eax
+		pushl %eax
+		pushl $1
+		call select
+		addl $20, %esp
+		movl %eax, SELECT_RESULT(%ebp)
+		
 
 		# erase old block on screen
 		pushl ALL_BLACK_COLOR_PAIR
 		call draw_block
 		addl $4, %esp
-
+		
+		# if it's > 0 then a keystroke is available
+		#cmpl $0, SELECT_RESULT(%ebp)
+		#jl SKIP_GETCH
 		call getch
-		#if  ((key_stroke = getch()) != -1){
-		call getch
+		#SKIP_GETCH:
 		movl %eax, KEY_STROKE(%ebp)
 		cmpl $-1, %eax 
 		je end_keystroke
@@ -847,25 +1189,49 @@ main_loop:
 
 		# FIXME shouldn't be needed
 		jmp end_keystroke
-		
+	
+		# LEFT
 		go_left:
 		call left_move_ok
 		cmpl $0, %eax
 		je end_keystroke
+
+		pushl KEY_STROKE(%ebp)
+		call does_movement_hit_existing_blocks
+		addl $4, %esp
+		cmpl $0, %eax
+		je end_keystroke
+
 		subl $1, current_x
 		jmp end_keystroke 
 
+		# RIGHT
 		go_right:
 		call right_move_ok
 		cmpl $0, %eax
 		je end_keystroke
+
+		pushl KEY_STROKE(%ebp)
+		call does_movement_hit_existing_blocks
+		addl $4, %esp
+		cmpl $0, %eax
+		je end_keystroke
+
 		addl $1, current_x
 		jmp end_keystroke 
 
+		# ROTATE
 		go_rotate:
 		call rotate_move_ok
 		cmpl $0, %eax
 		je end_keystroke
+
+		pushl KEY_STROKE(%ebp)
+		call does_movement_hit_existing_blocks
+		addl $4, %esp
+		cmpl $0, %eax
+		je end_keystroke
+
 		addl $1, current_rotation
 		cmpl $4, current_rotation
 		jne end_keystroke
