@@ -46,7 +46,7 @@ temp_y:
 .int 0
 # used for a timing loop. at level 1 it's 10, level 2 it's 9, level 3 it's 8, etc..
 level_counter:
-.int 10
+.int 100
 
 # represents current rotation of the block going down
 # can be 0 to 3
@@ -691,6 +691,308 @@ movl %ebp, %esp      #restore the stack pointer
 popl %ebp            #restore the base pointer
 ret
 
+###################################
+# function disolved_blocks
+# clears completed rows
+###################################
+.type disolved_blocks, @function
+disolved_blocks:
+pushl %ebp           #save old base pointer
+movl  %esp, %ebp     #make stack pointer the base pointer
+
+# takes up 64 bytes ( 16 * 4)
+.equ Y_COUNT, -4 
+# takes up 1024 
+#.equ TEMP_X_FILLED_SQUARES, -68
+.equ TEMP_X_FILLED_SQUARES, -72
+# takes up 1024 
+.equ TEMP_Y_FILLED_SQUARES, -1096
+#.equ NEW_BLOCK_COUNT, -2216
+.equ NEW_BLOCK_COUNT, -2120
+.equ DROP_COUNT, -2124
+.equ I, -2128
+
+
+subl $2128, %esp
+
+call draw_frame
+
+# initialize all values on the stack to 0
+#pushl $2120
+#pushl $0
+#movl %ebp, %eax
+#subl $2120, %eax
+#pushl %eax
+#call memset
+#addl $12, %esp
+
+pushl $2120 # size
+pushl $0
+movl %ebp, %eax
+subl $2120, %eax
+pushl %eax
+call memset
+addl $12, %esp
+# y locations 1 though 16
+movl $0, NEW_BLOCK_COUNT(%ebp) # FIXME should not be needed
+
+# part 1 find the rows which need to be disolved
+# Y_COUNT[0] is for y =0,  Y_COUNT[1] is for y =1, etc...
+movl $0, %edi
+movl %ebp, %edx
+subl $4, %edx # %edx holds the address of Y_COUNT(%ebp)
+begin_disolve_block_loop:
+	cmpl %edi, filled_squares_counter
+	je end_disolve_block_loop
+
+	movl $filled_squares_y, %ebx
+	movl %edi, %eax
+	imull $4, %eax
+	addl %eax, %ebx
+	movl (%ebx), %ecx # %ecx now has the y of current square being checked
+	imull $4, %ecx # %ecx is now the offset to use for Y_COUNT
+
+	movl %edx, %eax
+	subl %ecx, %eax
+	addl $1, (%eax)
+	
+	addl $1, %edi
+
+	jmp begin_disolve_block_loop
+end_disolve_block_loop:
+
+# part 2
+# destory the blocks in completed rows. do this by copying into a temporary 
+# array and then copy back
+movl %ebp, %edx
+subl $4, %edx # %edx holds the address of Y_COUNT(%ebp)
+movl $0, %edi
+begin_disolve_block_loop2:
+	cmpl %edi, filled_squares_counter
+	je end_disolve_block_loop2
+
+	# grab the y at %edi index
+	movl $filled_squares_y, %ebx
+	movl %edi, %eax
+	imull $4, %eax
+	addl %eax, %ebx
+	movl (%ebx), %ecx # %ecx now has the y of current square being checked
+
+	# should the block be eliminated
+	# get the count at Y_COUNT
+	movl %edx, %esi
+	movl %ecx, %eax
+	imull $4, %eax
+	#addl %eax, %esi
+	subl %eax, %esi
+	# ----------------------------------------------
+	movl (%esi), %esi # %esi now holds the right value at Y_COUNT
+	cmpl $16, %esi
+	je	block_will_be_eliminated
+
+	jmp block_will_not_be_eliminated
+
+	block_will_be_eliminated:
+
+	# FIXME dummy statement ERASE
+	movl %ebp, %eax
+
+	# START HERE
+	jmp block_eliminated_end
+
+	block_will_not_be_eliminated:
+		
+		# copy y value into temp array
+		movl %ebp, %eax 
+		subl $1096, %eax  #1096 is TEMP_Y_FILLED_SQUARES
+		movl NEW_BLOCK_COUNT(%ebp), %ebx
+		imull $4, %ebx
+		#addl %ebx, %eax # %eax now has the address of TEMP_Y_FILLED_SQUARES 
+		subl %ebx, %eax # %eax now has the address of TEMP_Y_FILLED_SQUARES 
+						# for current index
+		movl %ecx, (%eax) 
+
+		# grab the x at %edi index
+		movl %edi, %eax
+		imull $4, %eax
+		movl $filled_squares_x, %ebx
+		addl %eax, %ebx
+		movl (%ebx), %ecx # %ecx now has the x of current square being checked
+		# copy x value into temp array
+		movl %ebp, %eax 
+		subl $72, %eax  #72 is TEMP_X_FILLED_SQUARES
+		movl NEW_BLOCK_COUNT(%ebp), %ebx
+		imull $4, %ebx
+		#addl %ebx, %eax # %eax now has the address of TEMP_X_FILLED_SQUARES 
+		subl %ebx, %eax # %eax now has the address of TEMP_X_FILLED_SQUARES 
+						# for current index
+		movl %ecx, (%eax) 
+
+		addl $1, NEW_BLOCK_COUNT(%ebp)
+	block_eliminated_end:
+
+	addl $1, %edi
+
+	jmp begin_disolve_block_loop2
+end_disolve_block_loop2:
+
+# now copy the temp array back into the real array
+movl $0, %edi
+disolve_block_loop3:
+	cmpl %edi, NEW_BLOCK_COUNT(%ebp)
+	je end_disolve_block_loop3
+
+	# %ebx is 4 * %edi	
+	movl %edi, %ebx
+	imull $4, %ebx
+
+	# copy the y at %edi index
+	movl %ebp, %eax 
+	subl $1096, %eax  #1096 is TEMP_Y_FILLED_SQUARES
+	#addl %ebx, %eax # %eax now has the address of TEMP_Y_FILLED_SQUARES 
+	subl %ebx, %eax # %eax now has the address of TEMP_Y_FILLED_SQUARES 
+					# for current index
+	movl $filled_squares_y, %ecx
+	addl %ebx, %ecx
+	movl (%eax), %esi
+	movl %esi, (%ecx)
+
+
+	# copy the x at %edi index
+	movl %ebp, %eax 
+	subl $72, %eax   # 72 is TEMP_X_FILLED_SQUARES
+	#addl %ebx, %eax # %eax now has the address of TEMP_X_FILLED_SQUARES 
+	subl %ebx, %eax # %eax now has the address of TEMP_X_FILLED_SQUARES 
+					# for current index
+	movl $filled_squares_x, %ecx
+	addl %ebx, %ecx
+
+# FIXME erase to line ------------------------------------
+	#movl %esi, %ebx
+# end FIXME ------------------------------------
+
+	movl (%eax), %esi
+	movl %esi, (%ecx)
+
+# FIXME erase to line ---------------------
+	#pushl $x
+
+	#pushl FRAME_COLOR_PAIR
+	#call attron
+	#addl $4, %esp
+
+	#pushl %esi #x
+	#pushl %ebx
+	#call mvprintw 
+	#addl $12, %esp
+
+	#pushl FRAME_COLOR_PAIR
+	#call attroff
+	#addl $4, %esp
+# end FIXME --------------------------------
+
+	addl $1, %edi
+
+	jmp disolve_block_loop3  
+end_disolve_block_loop3:
+movl NEW_BLOCK_COUNT(%ebp), %eax
+movl %eax, filled_squares_counter
+
+# part 3
+# drop each block the correct account. i could have implemented without a 
+# nested loop but i got lazy
+movl $16, I(%ebp)
+movl $0, DROP_COUNT(%ebp)
+
+# loop every row
+disolve_block_loop4:
+	cmpl $0, I(%ebp)
+	je end_disolve_block_loop4
+	
+	# Y_COUNT[0] is for y =0,  Y_COUNT[1] is for y =1, etc...
+	movl %ebp, %eax
+	subl $4, %eax # Y_COUNT is -4
+	movl I(%ebp), %ebx
+	imull $4, %ebx
+	subl %ebx, %eax
+	#cmpl $16, Y_COUNT(%ebp) # FIXME
+	cmpl $16, (%eax)
+	jne no_drop_count_increase
+	addl $1, DROP_COUNT(%ebp)
+	no_drop_count_increase:
+
+	movl $0, %edi
+	inner_block:
+		cmpl %edi, filled_squares_counter
+		je end_inner_block
+
+		# grab the y at %edi index
+		movl %edi, %eax
+		imull $4, %eax
+		movl $filled_squares_y, %ebx
+		addl %eax, %ebx # %ebx has the address of the y being checked
+		movl (%ebx), %ecx # %ecx now has the y of current square being checked
+		
+		cmpl %ecx, I(%ebp) 
+		jne dont_change_value
+		movl DROP_COUNT(%ebp), %esi
+		addl %esi, (%ebx)
+		dont_change_value:
+		
+		addl $1, %edi
+		jmp inner_block
+	end_inner_block:
+
+	subl $1, I(%ebp)
+	jmp disolve_block_loop4
+end_disolve_block_loop4:
+
+# part 5 print out the new square
+movl $0, %edi
+start_print_loop2:
+	cmpl %edi, filled_squares_counter
+	je end_start_print_loop2
+
+	# grab the x at %edi index
+	movl %edi, %eax
+	imull $4, %eax
+	movl $filled_squares_x, %ebx
+	addl %eax, %ebx # %ebx has the address of the x being checked
+	movl (%ebx), %esi # %ecx now has the x of current square being checked
+
+	pushl $x
+	pushl %esi
+
+	# grab the y at %edi index
+	movl %edi, %eax
+	imull $4, %eax
+	movl $filled_squares_y, %ebx
+	addl %eax, %ebx # %ebx has the address of the y being checked
+	movl (%ebx), %ecx # %ecx now has the y of current square being checked
+
+	pushl %ecx
+	
+	pushl BLOCK_COLOR_PAIR
+	call attron
+	addl $4, %esp
+
+	call mvprintw 
+	addl $12, %esp
+
+	pushl BLOCK_COLOR_PAIR
+	call attroff
+	addl $4, %esp
+
+	addl $1, %edi
+	jmp start_print_loop2
+end_start_print_loop2:
+
+call refresh
+
+movl %ebp, %esp      #restore the stack pointer
+popl %ebp            #restore the base pointer
+ret
+
 
 ###################################
 # function new_block
@@ -704,12 +1006,16 @@ movl  %esp, %ebp     #make stack pointer the base pointer
 # don't call at the start of a game(current_y will be 0)
 cmpl $0, current_y
 je skip_leave_old_block
+addl $1, score
 call leave_old_block
 skip_leave_old_block:
 
 movl $0, current_rotation
 movl $8, current_x
 movl $1, current_y
+
+# FIXME FIXME uncomment
+call disolved_blocks
 
 # generate a random number between 0 and 3 for the block type
 # current_block_type
@@ -722,7 +1028,7 @@ divl %edi
 # remainder in %edx
 movl %edx, current_block_type
 # FIXME FIXME erase
-movl $0, current_block_type
+#movl $0, current_block_type
 
 movl %ebp, %esp      #restore the stack pointer
 popl %ebp            #restore the base pointer
@@ -873,6 +1179,9 @@ movl $filled_squares_x, %eax
 movl $filled_squares_y, %ebx
 
 check_loop:
+	cmpl %edi, filled_squares_counter 
+	je end_check_loop
+
 	movl (%eax), %ecx
 	movl (%ebx), %edx
 
@@ -906,8 +1215,6 @@ check_loop:
 	je block_is_done
 
 	blocks_ok_for_this_iteration:
-	cmpl %edi, filled_squares_counter 
-	je end_check_loop
 
 	addl $4, %eax
 	addl $4, %ebx
@@ -968,6 +1275,9 @@ movl $filled_squares_x, %eax
 movl $filled_squares_y, %ebx
 
 check_loop_existing_block:
+	cmpl %edi, filled_squares_counter 
+	je end_check_loop_existing_block
+
 	movl (%eax), %ecx
 	movl (%ebx), %edx
 
@@ -1016,8 +1326,6 @@ check_loop_existing_block:
 	je block_collision
 
 	do_blocks_ok_for_this_iteration:
-	cmpl %edi, filled_squares_counter 
-	je end_check_loop_existing_block
 
 	addl $4, %eax
 	addl $4, %ebx
@@ -1137,8 +1445,8 @@ main_loop:
 		#	suseconds_t tv_usec;    // microseconds 
 		# };
 		movl $0, TIMEVAL_tv_sec(%ebp)
-		movl $100000, TIMEVAL_tv_usec(%ebp) # .1 seconds
-		#movl  $900000, TIMEVAL_tv_usec(%ebp) # .1 seconds
+		#movl $100000, TIMEVAL_tv_usec(%ebp) # .1 seconds
+		movl $10000, TIMEVAL_tv_usec(%ebp) # .01 seconds
 
 		#retval = select(1, &rfds, NULL, NULL, &tv);
 		movl %ebp, %eax
@@ -1347,7 +1655,7 @@ addl $4, %esp
 call print_level_and_score
 
 # FIXME erase when ready
-call getch
+#call getch
 
 movl %ebp, %esp      #restore the stack pointer
 popl %ebp            #restore the base pointer
