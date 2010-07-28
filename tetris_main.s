@@ -998,6 +998,33 @@ movl %ebp, %esp      #restore the stack pointer
 popl %ebp            #restore the base pointer
 ret
 
+###################################
+# function is_game_over
+# determines if the game is over (player dies). no params passed in and 
+# return 0 if the game is over
+###################################
+.type is_game_over, @function
+is_game_over:
+pushl %ebp           #save old base pointer
+movl  %esp, %ebp     #make stack pointer the base pointer
+
+movl $0, %eax
+
+cmpl $2, current_y
+jle game_over_label
+cmpl $2, current_y1
+jle game_over_label
+cmpl $2, current_y2
+jle game_over_label
+cmpl $2, current_y3
+jle game_over_label
+movl $1, %eax
+
+game_over_label:
+
+movl %ebp, %esp      #restore the stack pointer
+popl %ebp            #restore the base pointer
+ret
 
 ###################################
 # function new_block
@@ -1008,13 +1035,23 @@ new_block:
 pushl %ebp           #save old base pointer
 movl  %esp, %ebp     #make stack pointer the base pointer
 
-# don't call at the start of a game(current_y will be 0)
+# skip a bunch of stuff if at start of a game(current_y will be 0)
 cmpl $0, current_y
-je skip_leave_old_block
+je skip_for_start_of_game
+
 addl $1, score
 addl $1, blocks_completed
 call leave_old_block
-skip_leave_old_block:
+
+# check if the game ended (blocks hit top of screen)
+call is_game_over
+cmpl $0, %eax
+jne game_not_over
+pushl score
+call game_over
+game_not_over:
+
+skip_for_start_of_game:
 
 movl $0, current_rotation
 movl $8, current_x
@@ -1060,7 +1097,7 @@ divl %edi
 # remainder in %edx
 movl %edx, current_block_type
 # FIXME FIXME erase
-#movl $0, current_block_type
+movl $0, current_block_type
 
 movl %ebp, %esp      #restore the stack pointer
 popl %ebp            #restore the base pointer
@@ -1420,8 +1457,6 @@ movl  %esp, %ebp     #make stack pointer the base pointer
 
 // 8 is pre FD_SET
 subl $144, %esp
-
-
 
 call new_block
 main_loop:
