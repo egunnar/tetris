@@ -44,9 +44,14 @@ temp_x:
 .int 0
 temp_y:
 .int 0
-# used for a timing loop. at level 1 it's 10, level 2 it's 9, level 3 it's 8, etc..
+# used for a timing loop. at level 1 it's 100, level 2 it's 90, level 3 it's 
+# 80, etc... it ends at level 10 which 10
 level_counter:
 .int 100
+# counts of blocks complete for game
+blocks_completed:
+.int 0
+
 
 # represents current rotation of the block going down
 # can be 0 to 3
@@ -1007,6 +1012,7 @@ movl  %esp, %ebp     #make stack pointer the base pointer
 cmpl $0, current_y
 je skip_leave_old_block
 addl $1, score
+addl $1, blocks_completed
 call leave_old_block
 skip_leave_old_block:
 
@@ -1014,7 +1020,33 @@ movl $0, current_rotation
 movl $8, current_x
 movl $1, current_y
 
-# FIXME FIXME uncomment
+# update the level stuff is it is time
+cmpl $10, blocks_completed
+je update_level
+cmpl $20, blocks_completed
+je update_level
+cmpl $30, blocks_completed
+je update_level
+cmpl $40, blocks_completed
+je update_level
+cmpl $50, blocks_completed
+je update_level
+cmpl $60, blocks_completed
+je update_level
+cmpl $70, blocks_completed
+je update_level
+cmpl $80, blocks_completed
+je update_level
+cmpl $90, blocks_completed
+je update_level
+jmp skip_update_level
+
+update_level:
+subl $10, level_counter
+addl $1, level
+
+skip_update_level:
+
 call disolved_blocks
 
 # generate a random number between 0 and 3 for the block type
