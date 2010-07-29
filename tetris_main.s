@@ -1,6 +1,3 @@
-# note for better keyboard control look into the select function
-# think it sleeps and is interupted by keyboard
-
 #define COLOR_BLACK	0
 #define COLOR_RED	1
 #define COLOR_GREEN	2
@@ -16,11 +13,14 @@
 #define KEY_LEFT	0404		/* left-arrow key */
 #define KEY_RIGHT	0405		/* right-arrow key */
 #
+# there are 4 types of blocks
 # block 0 is: block 1 block 2 block 3
 #   X          XX       X	    XX
 #   X          XX       X        XX
 #   X                   XX
 #   X
+#
+# note that i rely on the fact that each block type is made up of 4 squares
 # game play is 
 # screen 16 wide 16 high
 .section .data
@@ -52,14 +52,13 @@ level_counter:
 blocks_completed:
 .int 0
 
-
 # represents current rotation of the block going down
 # can be 0 to 3
 current_rotation:
 .int 0
 # the current x of the block
 # i want to initailly set this in the function to start each 
-# new blcok. point that the block rotates around
+# new blcok. this is point that the block rotates around
 current_x:
 .int 0
 current_y:
@@ -99,7 +98,6 @@ screen_x_size:
 .long 0
 screen_y_size:
 .long 0
-
 ALL_BLACK_COLOR_PAIR:
 .long 0
 BLOCK_COLOR_PAIR:
@@ -114,23 +112,21 @@ filled_squares_counter:
 .long 0
 
 .section .bss
-# game sqaures that have been filled by previous blocks. 256 is 16 * 16 which
-# is the playable area. 256 * 4 (each one will be 4 bytes) = 1024 FIXME (maybe) 
+# game squares that have been filled by previous blocks. squares 256 = 16 * 16 
+# which is the playable area. 256 * 4  = 1024 (each block is 4 bytes)
 .lcomm filled_squares_x, 1024
 .lcomm filled_squares_y, 1024
 
 .section .text
 
-###################################
+##############################################################################
 # function give_block_coord 
-###################################
-# this gives the location of 4 squares of the current
-# block (only really has to calculate 3 off of 
-# current_x and current_y). it puts the result in 
-# current_x1, current_x2, current_x3, and
-# current_y1, current_y2, current_y3. the function takes
-# no arguments
-###################################
+#
+# this gives the location of 4 squares of the current block (only really has
+# to calculate 3 off of current_x and current_y). it puts the result in 
+# current_x1, current_x2, current_x3, and current_y1, current_y2, current_y3.
+# the function takes no arguments
+##############################################################################
 .globl give_block_coord 
 .type give_block_coord, @function
 give_block_coord:
@@ -353,7 +349,7 @@ addl %eax, current_y3
 subl %ebx, current_x3
 jmp end_loop_rotation
 
-#rotation type 2 (-x, -y)
+# rotation type 2 (-x, -y)
 #  square 2
 #  get relative positive of 1 square to sqaure 0
 rotation_type_2:
@@ -450,26 +446,16 @@ movl %ebp, %esp      #restore the stack pointer
 popl %ebp            #restore the base pointer
 ret
 
-###################################
+##############################################################################
 # main_game
-###################################
+# takes no parameters and returns nothing. this function does the loop for 
+# the game play.
+##############################################################################
 .globl main_game
 .type main_game, @function
 main_game:
 pushl %ebp           #save old base pointer
 movl  %esp, %ebp     #make stack pointer the base pointer
-
-# FIXME ERASE uses filled_squares_counter instead
-# initalize filled_squares_x and filled_squares_y
-#movl $256, %ecx
-#movl $filled_squares_x, %eax 
-#movl $filled_squares_y, %ebx 
-#	initalize_filled_squares_loop:
-#	movl $0, (%eax) 
-#	movl $0, (%ebx) 
-#	addl $1, %eax
-#	addl $1, %ebx
-#	loop initalize_filled_squares_loop
 
 # set the seed for generating random numbers later
 # c code
@@ -492,6 +478,12 @@ call getmaxx
 movl %eax, screen_x_size
 addl $4, %esp
 
+#for getch turns off blocking mode
+#nodelay(stdscr, TRUE);
+pushl $1
+push stdscr
+call nodelay
+addl $8, %esp
 call draw_frame
 
 call main_game_loop
@@ -500,11 +492,11 @@ movl %ebp, %esp      #restore the stack pointer
 popl %ebp            #restore the base pointer
 ret
 
-###################################
-# function is_square_in_game_block # takes 2 parameters. the x and y cordinates
-# to check. returns 0 if not in the game play area.
-# otherwise 1
-###################################
+##############################################################################
+# function is_square_in_game_block 
+# takes 2 parameters. the x and y cordinates to check. returns 0 if not in 
+# the game play area.  otherwise 1
+##############################################################################
 .type is_square_in_game_block, @function
 is_square_in_game_block:
 pushl %ebp           #save old base pointer
@@ -538,10 +530,13 @@ movl %ebp, %esp      #restore the stack pointer
 popl %ebp            #restore the base pointer
 ret
 
-###################################
+##############################################################################
 # function draw_block
-# takes 1 param which is the color pair 
-###################################
+# draws the current block on the screen. called to overwrite the old shape 
+# (passing ALL_BLACK_COLOR_PAIR) with nothing or actually draw it (pass 
+# BLOCK_COLOR_PAIR)
+# takes 1 param which is the color pair and returns nothing. 
+##############################################################################
 .type draw_block, @function
 draw_block:
 pushl %ebp           #save old base pointer
@@ -617,8 +612,6 @@ skip_print3:
 
 call refresh
 
-# FIXME this is correct, right ?
-# pushl BLOCK_COLOR_PAIR
 pushl DRAW_COLOR_PAIR_PARAM(%ebp)
 call attroff
 addl $4, %esp
@@ -627,11 +620,11 @@ movl %ebp, %esp      #restore the stack pointer
 popl %ebp            #restore the base pointer
 ret
 
-###################################
+##############################################################################
 # function leave_old_block
 # draw the old block permemantly and save its squares in
 # filled_squares_x and filled_squares_y 
-###################################
+##############################################################################
 .type leave_old_block, @function
 leave_old_block:
 pushl %ebp           #save old base pointer
@@ -646,11 +639,6 @@ call give_block_coord
 movl $filled_squares_x, %eax
 movl $filled_squares_y, %ebx
 
-# old way
-#addl filled_squares_counter, %eax
-#addl filled_squares_counter, %ebx
-
-# FIXME isn't there a addressing way to do this better? 
 movl $0, %edi
 filled_square_loop:
 	cmpl %edi, filled_squares_counter
@@ -696,10 +684,11 @@ movl %ebp, %esp      #restore the stack pointer
 popl %ebp            #restore the base pointer
 ret
 
-###################################
+##############################################################################
 # function disolved_blocks
-# clears completed rows
-###################################
+# takes no parameters and returns nothign
+# clears completed rows and has rows above it fall. 
+##############################################################################
 .type disolved_blocks, @function
 disolved_blocks:
 pushl %ebp           #save old base pointer
@@ -707,29 +696,17 @@ movl  %esp, %ebp     #make stack pointer the base pointer
 
 # takes up 64 bytes ( 16 * 4)
 .equ Y_COUNT, -4 
-# takes up 1024 
-#.equ TEMP_X_FILLED_SQUARES, -68
+# takes up 1024 bytes
 .equ TEMP_X_FILLED_SQUARES, -72
-# takes up 1024 
+# takes up 1024 bytes
 .equ TEMP_Y_FILLED_SQUARES, -1096
-#.equ NEW_BLOCK_COUNT, -2216
 .equ NEW_BLOCK_COUNT, -2120
 .equ DROP_COUNT, -2124
 .equ I, -2128
 
-
 subl $2128, %esp
 
 call draw_frame
-
-# initialize all values on the stack to 0
-#pushl $2120
-#pushl $0
-#movl %ebp, %eax
-#subl $2120, %eax
-#pushl %eax
-#call memset
-#addl $12, %esp
 
 pushl $2120 # size
 pushl $0
@@ -739,7 +716,7 @@ pushl %eax
 call memset
 addl $12, %esp
 # y locations 1 though 16
-movl $0, NEW_BLOCK_COUNT(%ebp) # FIXME should not be needed
+movl $0, NEW_BLOCK_COUNT(%ebp) 
 
 # part 1 find the rows which need to be disolved
 # Y_COUNT[0] is for y =0,  Y_COUNT[1] is for y =1, etc...
@@ -790,20 +767,10 @@ begin_disolve_block_loop2:
 	imull $4, %eax
 	#addl %eax, %esi
 	subl %eax, %esi
-	# ----------------------------------------------
 	movl (%esi), %esi # %esi now holds the right value at Y_COUNT
 	cmpl $16, %esi
-	je	block_will_be_eliminated
-
+	je	block_eliminated_end
 	jmp block_will_not_be_eliminated
-
-	block_will_be_eliminated:
-
-	# FIXME dummy statement ERASE
-	movl %ebp, %eax
-
-	# START HERE
-	jmp block_eliminated_end
 
 	block_will_not_be_eliminated:
 		
@@ -828,7 +795,6 @@ begin_disolve_block_loop2:
 		subl $72, %eax  #72 is TEMP_X_FILLED_SQUARES
 		movl NEW_BLOCK_COUNT(%ebp), %ebx
 		imull $4, %ebx
-		#addl %ebx, %eax # %eax now has the address of TEMP_X_FILLED_SQUARES 
 		subl %ebx, %eax # %eax now has the address of TEMP_X_FILLED_SQUARES 
 						# for current index
 		movl %ecx, (%eax) 
@@ -854,7 +820,6 @@ disolve_block_loop3:
 	# copy the y at %edi index
 	movl %ebp, %eax 
 	subl $1096, %eax  #1096 is TEMP_Y_FILLED_SQUARES
-	#addl %ebx, %eax # %eax now has the address of TEMP_Y_FILLED_SQUARES 
 	subl %ebx, %eax # %eax now has the address of TEMP_Y_FILLED_SQUARES 
 					# for current index
 	movl $filled_squares_y, %ecx
@@ -862,40 +827,15 @@ disolve_block_loop3:
 	movl (%eax), %esi
 	movl %esi, (%ecx)
 
-
 	# copy the x at %edi index
 	movl %ebp, %eax 
 	subl $72, %eax   # 72 is TEMP_X_FILLED_SQUARES
-	#addl %ebx, %eax # %eax now has the address of TEMP_X_FILLED_SQUARES 
 	subl %ebx, %eax # %eax now has the address of TEMP_X_FILLED_SQUARES 
 					# for current index
 	movl $filled_squares_x, %ecx
 	addl %ebx, %ecx
-
-# FIXME erase to line ------------------------------------
-	#movl %esi, %ebx
-# end FIXME ------------------------------------
-
 	movl (%eax), %esi
 	movl %esi, (%ecx)
-
-# FIXME erase to line ---------------------
-	#pushl $x
-
-	#pushl FRAME_COLOR_PAIR
-	#call attron
-	#addl $4, %esp
-
-	#pushl %esi #x
-	#pushl %ebx
-	#call mvprintw 
-	#addl $12, %esp
-
-	#pushl FRAME_COLOR_PAIR
-	#call attroff
-	#addl $4, %esp
-# end FIXME --------------------------------
-
 	addl $1, %edi
 
 	jmp disolve_block_loop3  
@@ -920,7 +860,6 @@ disolve_block_loop4:
 	movl I(%ebp), %ebx
 	imull $4, %ebx
 	subl %ebx, %eax
-	#cmpl $16, Y_COUNT(%ebp) # FIXME
 	cmpl $16, (%eax)
 	jne no_drop_count_increase
 	addl $1, DROP_COUNT(%ebp)
@@ -998,11 +937,11 @@ movl %ebp, %esp      #restore the stack pointer
 popl %ebp            #restore the base pointer
 ret
 
-###################################
+##############################################################################
 # function is_game_over
 # determines if the game is over (player dies). no params passed in and 
 # return 0 if the game is over
-###################################
+##############################################################################
 .type is_game_over, @function
 is_game_over:
 pushl %ebp           #save old base pointer
@@ -1026,16 +965,17 @@ movl %ebp, %esp      #restore the stack pointer
 popl %ebp            #restore the base pointer
 ret
 
-###################################
+##############################################################################
 # function new_block
+# takes no parameters and returns nothing
 # whenever a new block is started at the top of the screen
-###################################
+##############################################################################
 .type new_block, @function
 new_block:
 pushl %ebp           #save old base pointer
 movl  %esp, %ebp     #make stack pointer the base pointer
 
-# skip a bunch of stuff if at start of a game(current_y will be 0)
+# skip a bunch of stuff if at start of a game (current_y will be 0)
 cmpl $0, current_y
 je skip_for_start_of_game
 
@@ -1096,18 +1036,16 @@ movl $4, %edi
 divl %edi
 # remainder in %edx
 movl %edx, current_block_type
-# FIXME FIXME erase
-movl $0, current_block_type
 
 movl %ebp, %esp      #restore the stack pointer
 popl %ebp            #restore the base pointer
 ret
 
-###################################
+##############################################################################
 # function left_move_ok
 # takes no arguments
 # returns 0 if can't go left 
-###################################
+##############################################################################
 .type left_move_ok, @function
 left_move_ok:
 pushl %ebp           #save old base pointer
@@ -1134,11 +1072,11 @@ movl %ebp, %esp      #restore the stack pointer
 popl %ebp            #restore the base pointer
 ret
 
-###################################
+##############################################################################
 # function rotate_move_ok
 # takes no arguments
 # returns 0 if can't rotate
-###################################
+##############################################################################
 .type rotate_move_ok, @function
 rotate_move_ok:
 pushl %ebp           #save old base pointer
@@ -1183,11 +1121,11 @@ dont_reset_rotation2:
 movl %ebp, %esp      #restore the stack pointer
 popl %ebp            #restore the base pointer
 ret
-###################################
+##############################################################################
 # function right_move_ok
 # takes no arguments
 # returns 0 if can't go right 
-###################################
+##############################################################################
 .type right_move_ok, @function
 right_move_ok:
 pushl %ebp           #save old base pointer
@@ -1212,13 +1150,13 @@ movl %ebp, %esp      #restore the stack pointer
 popl %ebp            #restore the base pointer
 ret
 
-###################################
+##############################################################################
 # function time_for_new_block
 # takes no arguments
 # returns 0 if the current hit bottom of screen from
 # 1) the very bottom of the playable area
 # 2) other older blocks at rest
-###################################
+##############################################################################
 .type time_for_new_block, @function
 time_for_new_block:
 pushl %ebp           #save old base pointer
@@ -1302,12 +1240,12 @@ movl %ebp, %esp      #restore the stack pointer
 popl %ebp            #restore the base pointer
 ret
 
-###################################
+##############################################################################
 # function does_movement_hit_existing_blocks
 # takes 1 arg - the key stroke just hit (for left, right, 
 # or rotate)
 # returns 0 if the move is invalid
-###################################
+##############################################################################
 .type does_movement_hit_existing_blocks, @function
 does_movement_hit_existing_blocks:
 pushl %ebp           #save old base pointer
@@ -1333,9 +1271,6 @@ prepare_rotate_logic:
 no_prepare_rotate_logic:
 
 call give_block_coord 
-
-# START HERE make it work for key strokes other than
-# left
 
 movl $0, RETURN_VALUE(%ebp)
 
@@ -1426,37 +1361,45 @@ movl RETURN_VALUE(%ebp), %eax
 movl %ebp, %esp      #restore the stack pointer
 popl %ebp            #restore the base pointer
 ret
-###################################
 
-
-###################################
+##############################################################################
 # function main_game_loop
-###################################
+# takes no parameter and returns nothings
+##############################################################################
 .type main_game_loop, @function
 main_game_loop:
 pushl %ebp           #save old base pointer
 movl  %esp, %ebp     #make stack pointer the base pointer
 
-# FIXME I is used elsewhere, this ok? 
 .equ I, -4
 .equ KEY_STROKE, -8
-
-# then reserve 128 for fd_set struct
-# @ -12
-# then 8 for timeval
-# @ -140
 .equ TIME_VAL, -144
 .equ SELECT_RESULT, -148
-
-#.equ FD_SET, -12  # 128 bytes
-#.equ TIMEVAL, -140 # 8 bytes
-
 .equ TIMEVAL_tv_sec, -144
 .equ TIMEVAL_tv_usec, -140
 .equ FD_SET, -136
 
-// 8 is pre FD_SET
 subl $144, %esp
+
+# after a game ends i can come back into this function for 2nd and subsequent
+# games. i need to initialize all the globals again.	
+movl $0, temp_x
+movl $0, temp_y
+movl $100, level_counter
+movl $0, blocks_completed
+movl $0, current_rotation
+movl $0, current_x
+movl $0, current_y
+movl $0, current_x1
+movl $0, current_x2
+movl $0, current_x3
+movl $0, current_y1
+movl $0, current_y2
+movl $0, current_y3
+movl $0, current_block_type
+movl $0, score
+movl $1, level
+movl $0, filled_squares_counter
 
 call new_block
 main_loop:
@@ -1470,7 +1413,6 @@ main_loop:
 	call new_block
 	no_new_block_time:
 
-	# FIXME movl $0 instead
 	movl $1, I(%ebp)
 	time_loop:
 
@@ -1478,12 +1420,6 @@ main_loop:
 		pushl BLOCK_COLOR_PAIR
 		call draw_block
 		addl $4, %esp
-
-		# sleep
-		# think -1 means no key stroke
-		#pushl $100000 # .1 seconds
-		#call usleep 
-		#addl $4, %esp
 
 		#FD_ZERO(&rfds);
 		pushl $128
@@ -1497,13 +1433,11 @@ main_loop:
 		addl $12, %esp 
 
 
-		#FD_SET(0, &rfds);
-		# i think this set the 0 bit to 1 ??
-		# FIXME may not work
+		# FD_SET(0, &rfds);
+		# i think this set the 0 bit to 1 
 		movl %ebp, %eax
 		subl $139, %eax 
 		movb $1, (%eax)
-		#movl $1, FD_SET(%ebp)
 		
 		# tv.tv_sec = 5;
 		# tv.tv_usec = 0;
@@ -1512,7 +1446,6 @@ main_loop:
 		#	suseconds_t tv_usec;    // microseconds 
 		# };
 		movl $0, TIMEVAL_tv_sec(%ebp)
-		#movl $100000, TIMEVAL_tv_usec(%ebp) # .1 seconds
 		movl $10000, TIMEVAL_tv_usec(%ebp) # .01 seconds
 
 		#retval = select(1, &rfds, NULL, NULL, &tv);
@@ -1529,21 +1462,16 @@ main_loop:
 		addl $20, %esp
 		movl %eax, SELECT_RESULT(%ebp)
 		
-
 		# erase old block on screen
 		pushl ALL_BLACK_COLOR_PAIR
 		call draw_block
 		addl $4, %esp
 		
 		# if it's > 0 then a keystroke is available
-		#cmpl $0, SELECT_RESULT(%ebp)
-		#jl SKIP_GETCH
 		call getch
-		#SKIP_GETCH:
 		movl %eax, KEY_STROKE(%ebp)
 		cmpl $-1, %eax 
 		je end_keystroke
-		#if (key_stroke == 'j'|| key_stroke == KEY_LEFT ){
 		cmpl $106, KEY_STROKE(%ebp)
 		je go_left
 		cmpl $260, KEY_STROKE(%ebp)
@@ -1562,7 +1490,7 @@ main_loop:
 		cmpl $105, KEY_STROKE(%ebp)
 		je go_up
 
-		# FIXME shouldn't be needed
+		# this shouldn't be needed
 		jmp end_keystroke
 	
 		# LEFT
@@ -1634,9 +1562,10 @@ movl %ebp, %esp      #restore the stack pointer
 popl %ebp            #restore the base pointer
 ret
 
-###################################
+##############################################################################
 # function to draw basic frame around game play
-###################################
+# takes no parameters and returns nothing
+##############################################################################
 .type draw_frame, @function
 draw_frame:
 pushl %ebp           #save old base pointer
@@ -1646,14 +1575,12 @@ subl $4, %esp
 
 call setup_color_pairs
 
-# NEED a ncurse function to clear screen here
 call clear_screen
 
 pushl FRAME_COLOR_PAIR
 call attron
 addl $4, %esp
 
-# FIXME ERASE
 # game play is 
 # screen 16 wide 16 high
 pushl $eighteen_xes
@@ -1721,16 +1648,14 @@ addl $4, %esp
 
 call print_level_and_score
 
-# FIXME erase when ready
-#call getch
-
 movl %ebp, %esp      #restore the stack pointer
 popl %ebp            #restore the base pointer
 ret
 
-###################################
+##############################################################################
 # function to print_level_and_score
-###################################
+# takes no parameters and returns nothing
+##############################################################################
 .type print_level_and_score, @function
 print_level_and_score:
 pushl %ebp           #save old base pointer
@@ -1762,9 +1687,10 @@ movl %ebp, %esp      #restore the stack pointer
 popl %ebp            #restore the base pointer
 ret
 
-###################################
+##############################################################################
 # function to clear_screen
-###################################
+# takes no parameters and returns nothing
+##############################################################################
 .type clear_screen, @function
 clear_screen:
 pushl %ebp           #save old base pointer
@@ -1812,7 +1738,6 @@ jmp loop_on_y
 end_clear_screen:
 
 pushl ALL_BLACK_COLOR_PAIR
-#call attroff(COLOR_PAIR(1))
 call attroff
 addl $4, %esp
 
@@ -1820,9 +1745,12 @@ movl %ebp, %esp      #restore the stack pointer
 popl %ebp            #restore the base pointer
 ret
 
-##################################
+##############################################################################
 # function setup_color_pairs
-##################################
+# takes no parameters and returns nothing
+# set up the global variables for the color pairs (makes things easier for
+# later
+##############################################################################
 .type setup_color_pairs, @function
 setup_color_pairs:
 pushl %ebp           #save old base pointer
@@ -1880,10 +1808,10 @@ movl %ebp, %esp      #restore the stack pointer
 popl %ebp            #restore the base pointer
 ret
 
-###################################
+##############################################################################
 # function to set the color
-# takes 1 arg which is the color pair to set 
-###################################
+# takes 1 arg which is the color pair to set and returns nothing
+##############################################################################
 .type set_color, @function
 set_color:
 pushl %ebp           #save old base pointer
@@ -1895,7 +1823,6 @@ call COLOR_PAIR
 addl $4, %esp
 
 pushl %eax
-#call attron(COLOR_PAIR(1))
 call attron
 addl $4, %esp
 
