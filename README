@@ -1,0 +1,7 @@
+need ncurses library to work. built on 32bit/x86.to build do:
+
+as -ggdb tetris_splash.s -o tetris.o && \
+ld -ggdb -dynamic-linker /lib/ld-linux.so.2 tetris.o -lc -lncurses -o tetris
+
+to run do:
+./tetris
